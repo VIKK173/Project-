@@ -1,10 +1,4 @@
-﻿import mongoose from "mongoose";
-
-const MONGODB_URI = process.env.MONGODB_URI ?? "";
-
-if (!MONGODB_URI) {
-  throw new Error("Missing MONGODB_URI in .env.local");
-}
+import mongoose from "mongoose";
 
 type MongooseCache = {
   conn: typeof mongoose | null;
@@ -23,6 +17,11 @@ const cached: MongooseCache = globalWithMongoose.mongoose ?? {
 globalWithMongoose.mongoose = cached;
 
 export async function connectToDatabase() {
+  const MONGODB_URI = process.env.MONGODB_URI ?? "";
+  if (!MONGODB_URI) {
+    throw new Error("Missing MONGODB_URI in .env.local");
+  }
+
   if (cached.conn) {
     return cached.conn;
   }

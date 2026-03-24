@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useClerk, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { SERVICES, PROS, TESTIS } from "@/lib/data";
@@ -105,6 +105,8 @@ export default function Home() {
   const [dashPanel, setDashPanel] = useState("overview");
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+  const [trustOpenId, setTrustOpenId] = useState<string | null>(null);
+  const trustBarRef = useRef<HTMLDivElement | null>(null);
 
   // Booking states
   const [selSvc, setSelSvc] = useState<ServiceItem | null>(null);
@@ -122,6 +124,27 @@ export default function Home() {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
   };
+
+  useEffect(() => {
+    if (!trustOpenId) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setTrustOpenId(null);
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      const root = trustBarRef.current;
+      if (!root) return;
+      if (e.target instanceof Node && !root.contains(e.target)) setTrustOpenId(null);
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [trustOpenId]);
 
   const heroSlides = HERO_SLIDES.map((slide) => {
     const svc = SERVICES.find((service) => service.id === slide.id);
@@ -142,6 +165,25 @@ export default function Home() {
     }, 5000);
     return () => clearInterval(timer);
   }, [heroSlides.length]);
+
+  // Load orders from localStorage on mount
+  useEffect(() => {
+    const savedOrders = localStorage.getItem('sh_orders');
+    if (savedOrders) {
+      try {
+        setOrders(JSON.parse(savedOrders));
+      } catch (e) {
+        console.error('Failed to parse saved orders:', e);
+      }
+    }
+  }, []);
+
+  // Save orders to localStorage whenever they change
+  useEffect(() => {
+    if (orders.length > 0) {
+      localStorage.setItem('sh_orders', JSON.stringify(orders));
+    }
+  }, [orders]);
 
   useEffect(() => {
     console.log("[user-auth-debug]", {
@@ -558,27 +600,67 @@ export default function Home() {
 
           {/* Trust Bar */}
           <div className="bg-white border-b border-slate2-100 py-3.5 px-4">
-            <div className="max-w-7xl mx-auto flex items-center justify-center gap-10 flex-wrap">
-              <div className="flex items-center gap-2.5 text-sm font-bold text-slate2-700 tracking-tight">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                <span>Background Verified</span>
-              </div>
-              <div className="flex items-center gap-2.5 text-sm font-bold text-slate2-700 tracking-tight">
-                <ShieldCheck className="w-4 h-4 text-brand-500" />
-                <span>Fully Insured Professionals</span>
-              </div>
-              <div className="flex items-center gap-2.5 text-sm font-bold text-slate2-700 tracking-tight">
-                <Award className="w-4 h-4 text-amber-500" />
-                <span>100% Satisfaction Guarantee</span>
-              </div>
-              <div className="flex items-center gap-2.5 text-sm font-bold text-slate2-700 tracking-tight">
-                <RefreshCcw className="w-4 h-4 text-blue-500" />
-                <span>Free Re-service Promise</span>
-              </div>
-              <div className="flex items-center gap-2.5 text-sm font-bold text-slate2-700 tracking-tight">
-                <CreditCard className="w-4 h-4 text-purple-500" />
-                <span>Secure Payments</span>
-              </div>
+            <div ref={trustBarRef} className="max-w-7xl mx-auto flex items-center justify-center gap-10 flex-wrap">
+              {[
+                {
+                  id: "bg",
+                  label: "Background Verified",
+                  hint: "Every professional is verified with identity & background checks.",
+                  icon: <CheckCircle2 className="w-4 h-4 text-emerald-500" />,
+                },
+                {
+                  id: "ins",
+                  label: "Fully Insured Professionals",
+                  hint: "Work is covered with insurance for extra peace of mind.",
+                  icon: <ShieldCheck className="w-4 h-4 text-brand-500" />,
+                },
+                {
+                  id: "sat",
+                  label: "100% Satisfaction Guarantee",
+                  hint: "Not happy? We’ll fix it or refund as per policy.",
+                  icon: <Award className="w-4 h-4 text-amber-500" />,
+                },
+                {
+                  id: "res",
+                  label: "Free Re-service Promise",
+                  hint: "If something isn’t right, request a free re-service within the window.",
+                  icon: <RefreshCcw className="w-4 h-4 text-blue-500" />,
+                },
+                {
+                  id: "pay",
+                  label: "Secure Payments",
+                  hint: "Payments are processed securely and your details stay protected.",
+                  icon: <CreditCard className="w-4 h-4 text-purple-500" />,
+                },
+              ].map((t) => {
+                const open = trustOpenId === t.id;
+                return (
+                  <div key={t.id} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setTrustOpenId(open ? null : t.id)}
+                      className="flex items-center gap-2.5 text-sm font-bold text-slate2-700 tracking-tight hover:text-slate2-900 transition-colors"
+                      aria-haspopup="dialog"
+                      aria-expanded={open}
+                    >
+                      {t.icon}
+                      <span className="underline decoration-dotted underline-offset-4">{t.label}</span>
+                    </button>
+
+                    {open && (
+                      <div
+                        role="dialog"
+                        aria-label={t.label}
+                        className="absolute left-1/2 -translate-x-1/2 top-[calc(100%+10px)] z-50 w-[260px] rounded-xl border border-slate2-200 bg-white shadow-xl p-3 text-xs font-semibold text-slate2-700"
+                      >
+                        <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 bg-white border-l border-t border-slate2-200" />
+                        <div className="text-slate2-900 text-sm font-bold mb-1">{t.label}</div>
+                        <div className="leading-relaxed">{t.hint}</div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -867,13 +949,28 @@ export default function Home() {
               <div className="font-display text-3xl font-bold text-white mb-6 tracking-tight">Service<span className="text-brand-400">Hub</span></div>
               <p className="text-sm text-slate2-400 leading-relaxed mb-8 max-w-sm font-medium">Professional home services delivered to your door. Trusted by 50,000+ households for quality and reliability.</p>
               <div className="flex gap-3">
-                <button className="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white hover:bg-brand-500 hover:border-brand-500 transition-all duration-300">
+                <button
+                  type="button"
+                  aria-label="Instagram"
+                  onClick={() => showToast("Instagram link coming soon!")}
+                  className="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white hover:bg-brand-500 hover:border-brand-500 transition-all duration-300"
+                >
                   <Instagram className="w-5 h-5" />
                 </button>
-                <button className="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white hover:bg-brand-500 hover:border-brand-500 transition-all duration-300">
+                <button
+                  type="button"
+                  aria-label="Facebook"
+                  onClick={() => showToast("Facebook link coming soon!")}
+                  className="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white hover:bg-brand-500 hover:border-brand-500 transition-all duration-300"
+                >
                   <Facebook className="w-5 h-5 fill-current" />
                 </button>
-                <button className="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white hover:bg-brand-500 hover:border-brand-500 transition-all duration-300">
+                <button
+                  type="button"
+                  aria-label="Twitter"
+                  onClick={() => showToast("Twitter link coming soon!")}
+                  className="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white hover:bg-brand-500 hover:border-brand-500 transition-all duration-300"
+                >
                   <Twitter className="w-5 h-5 fill-current" />
                 </button>
               </div>
@@ -882,9 +979,15 @@ export default function Home() {
               <h4 className="text-[11px] font-black text-white uppercase tracking-[0.2em] mb-7">Popular Services</h4>
               <ul className="space-y-4 text-sm font-medium text-slate2-400">
                 {SERVICES.slice(0, 5).map(s => (
-                  <li key={s.id} onClick={() => openBooking(s.id)} className="hover:text-brand-400 cursor-pointer transition-all flex items-center gap-2 group">
+                  <li key={s.id}>
+                    <button
+                      type="button"
+                      onClick={() => openBooking(s.id)}
+                      className="w-full text-left hover:text-brand-400 cursor-pointer transition-all flex items-center gap-2 group"
+                    >
                     <span className="w-1.5 h-1.5 rounded-full bg-slate2-700 group-hover:bg-brand-500 transition-colors"></span>
                     {s.name}
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -892,19 +995,51 @@ export default function Home() {
             <div>
               <h4 className="text-[11px] font-black text-white uppercase tracking-[0.2em] mb-7">Our Company</h4>
               <ul className="space-y-4 text-sm font-medium text-slate2-400">
-                <li className="hover:text-brand-400 cursor-pointer transition-all">About Our Story</li>
-                <li className="hover:text-brand-400 cursor-pointer transition-all">Career Opportunities</li>
-                <li className="hover:text-brand-400 cursor-pointer transition-all">Service Quality Blog</li>
-                <li className="hover:text-brand-400 cursor-pointer transition-all">Become a Partner</li>
+                <li>
+                  <button type="button" onClick={() => showToast("About page coming soon!")} className="hover:text-brand-400 cursor-pointer transition-all">
+                    About Our Story
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={() => showToast("Careers page coming soon!")} className="hover:text-brand-400 cursor-pointer transition-all">
+                    Career Opportunities
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={() => showToast("Blog coming soon!")} className="hover:text-brand-400 cursor-pointer transition-all">
+                    Service Quality Blog
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={() => showToast("Partner signup coming soon!")} className="hover:text-brand-400 cursor-pointer transition-all">
+                    Become a Partner
+                  </button>
+                </li>
               </ul>
             </div>
             <div>
               <h4 className="text-[11px] font-black text-white uppercase tracking-[0.2em] mb-7">Contact & Support</h4>
               <ul className="space-y-4 text-sm font-medium text-slate2-400">
-                <li className="flex items-center gap-3"><PhoneCall className="w-4 h-4 text-brand-500" /> +91 1800-SERVICE</li>
-                <li className="hover:text-brand-400 cursor-pointer transition-all">Help Center</li>
-                <li className="hover:text-brand-400 cursor-pointer transition-all">Privacy Policy</li>
-                <li className="hover:text-brand-400 cursor-pointer transition-all">Terms & Conditions</li>
+                <li>
+                  <a href="tel:+9118007378423" className="flex items-center gap-3 hover:text-brand-400 transition-all">
+                    <PhoneCall className="w-4 h-4 text-brand-500" /> +91 1800-SERVICE
+                  </a>
+                </li>
+                <li>
+                  <button type="button" onClick={() => showToast("Help Center coming soon!")} className="hover:text-brand-400 cursor-pointer transition-all">
+                    Help Center
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={() => showToast("Privacy Policy page coming soon!")} className="hover:text-brand-400 cursor-pointer transition-all">
+                    Privacy Policy
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={() => showToast("Terms & Conditions page coming soon!")} className="hover:text-brand-400 cursor-pointer transition-all">
+                    Terms & Conditions
+                  </button>
+                </li>
               </ul>
             </div>
           </div>
